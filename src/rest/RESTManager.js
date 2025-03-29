@@ -2,7 +2,7 @@ const fetch = require("node-fetch");
 const AbortController = require("abort-controller");
 const { Host } = require("../util/Constants");
 const Router = require("./Router");
-const pkg = require("../../package.json");
+const pkg = require("../package.json");
 
 class RESTManager {
     constructor(client) {
