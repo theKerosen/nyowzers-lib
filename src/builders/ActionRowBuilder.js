@@ -3,7 +3,6 @@ const ButtonBuilder = require("./ButtonBuilder");
 
 /**
  * Utility for creating action rows (containers for components).
- * See: https:
  */
 class ActionRowBuilder {
     constructor(data = {}) {
@@ -34,8 +33,7 @@ class ActionRowBuilder {
         const componentsToAdd = components
             .flat()
             .map((c) =>
-                c instanceof
-                ButtonBuilder /* || c instanceof SelectMenuBuilder etc. */
+                c instanceof ButtonBuilder
                     ? c
                     : this._createComponentBuilder(c),
             );
@@ -48,8 +46,7 @@ class ActionRowBuilder {
         const componentsToAdd = components
             .flat()
             .map((c) =>
-                c instanceof
-                ButtonBuilder /* || c instanceof SelectMenuBuilder etc. */
+                c instanceof ButtonBuilder
                     ? c
                     : this._createComponentBuilder(c),
             );

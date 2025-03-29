@@ -25,7 +25,7 @@ class MemberManager extends BaseManager {
 
         const member = new Member(this.client, data, this.guild);
         if (cache) {
-            /* ... */ this.cache.set(member.id, member);
+            this.cache.set(member.id, member);
         }
         return member;
     }

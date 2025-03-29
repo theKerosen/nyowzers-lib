@@ -1,6 +1,5 @@
 const BaseManager = require("./BaseManager");
 const Message = require("../structures/Message");
-const Router = require("../rest/Router");
 const Collection = require("../util/Collection");
 
 class MessageManager extends BaseManager {
@@ -11,20 +10,18 @@ class MessageManager extends BaseManager {
 
     _add(data, cache = true) {
         if (!data || !data.id) {
-            /* ... fatal log ... */ return null;
+            console.error(
+                "[FATAL MessageManager._add] Received invalid or missing data:",
+                data,
+            );
+            return null;
         }
 
         const existing = this.cache.get(data.id);
         if (existing && cache) {
-            console.log(
-                `[DEBUG MessageManager] Patching existing message ${data.id}`,
-            );
             return existing._patch(data);
         }
 
-        console.log(
-            `[DEBUG MessageManager] Creating new message instance for ID: ${data.id}`,
-        );
         let message;
         try {
             message = new Message(this.client, data);
@@ -46,30 +43,40 @@ class MessageManager extends BaseManager {
         }
 
         if (cache) {
-            /* ... caching logic ... */
+            if (this.cacheLimit > 0 && this.cache.size >= this.cacheLimit) {
+                this.cache.delete(this.cache.firstKey());
+            }
+            this.cache.set(message.id, message);
         }
 
-        console.log(
-            `[DEBUG MessageManager] Returning VALID message instance with ID: ${message.id}`,
-        );
         return message;
+    }
+
+    resolveId(resolvable) {
+        if (resolvable instanceof Message) return resolvable.id;
+        if (typeof resolvable === "string") return resolvable;
+        return null;
     }
 
     async fetch(options) {
         if (typeof options === "string") {
             const id = options;
-            const existing = this.cache.get(id);
-            if (existing && !existing.partial) return existing;
+
+            if (this.cacheLimit > 0) {
+                const existing = this.cache.get(id);
+                if (existing && !existing.partial) return existing;
+            }
 
             try {
                 const data = await this.client.rest.getChannelMessage(
                     this.channel.id,
                     id,
                 );
-                return this._add(data);
+
+                return this._add(data, this.cacheLimit > 0);
             } catch (error) {
                 if (error.status === 404) {
-                    this._remove(id);
+                    this.cache.delete(id);
                     return null;
                 }
                 throw error;
@@ -77,43 +84,49 @@ class MessageManager extends BaseManager {
         } else if (typeof options === "object" && options !== null) {
             const { limit = 50, before, after, around } = options;
             const query = new URLSearchParams({ limit });
+
             if (before) query.set("before", this.resolveId(before));
             if (after) query.set("after", this.resolveId(after));
             if (around) query.set("around", this.resolveId(around));
 
-            const data = await this.client.rest.getChannelMessages(
+            const dataArray = await this.client.rest.getChannelMessages(
                 this.channel.id,
                 query,
             );
             const results = new Collection();
-            for (const msgData of data) {
-                const message = this._add(msgData);
+            for (const msgData of dataArray) {
+                const message = this._add(msgData, this.cacheLimit > 0);
                 results.set(message.id, message);
             }
             return results;
         } else {
-            const data = await this.client.rest.getChannelMessages(
+            const dataArray = await this.client.rest.getChannelMessages(
                 this.channel.id,
                 new URLSearchParams({ limit: 50 }),
             );
             const results = new Collection();
-            for (const msgData of data) {
-                const message = this._add(msgData);
+            for (const msgData of dataArray) {
+                const message = this._add(msgData, this.cacheLimit > 0);
                 results.set(message.id, message);
             }
             return results;
         }
     }
 
-    async delete(messageResolvable) {
+    async delete(messageResolvable, reason) {
         const messageId = this.resolveId(messageResolvable);
-        if (!messageId) throw new Error("Invalid message resolvable provided.");
-        await this.client.rest.deleteMessage(this.channel.id, messageId);
+        if (!messageId)
+            throw new Error("Invalid message resolvable provided for delete.");
+
+        await this.client.rest.deleteMessage(this.channel.id, messageId, {
+            reason,
+        });
     }
 
     async edit(messageResolvable, options) {
         const messageId = this.resolveId(messageResolvable);
-        if (!messageId) throw new Error("Invalid message resolvable provided.");
+        if (!messageId)
+            throw new Error("Invalid message resolvable provided for edit.");
 
         let payload = {};
         if (typeof options === "string") {

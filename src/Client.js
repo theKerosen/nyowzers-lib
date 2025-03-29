@@ -7,11 +7,7 @@ const UserManager = require("./managers/UserManager");
 const Base = require("./structures/Base");
 const ApplicationCommandManager = require("./managers/ApplicationCommandManager");
 const Intents = require("./util/Intents");
-const {
-    Events,
-    DefaultIntentsBitField,
-    Constants,
-} = require("./util/Constants");
+const { Events, DefaultIntentsBitField } = require("./util/Constants");
 
 const defaultOptions = {
     intents: DefaultIntentsBitField,

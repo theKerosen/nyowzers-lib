@@ -2,7 +2,6 @@ const { ComponentTypes, ButtonStyle } = require("../util/Constants");
 
 /**
  * Utility for creating message buttons.
- * See: https:
  */
 class ButtonBuilder {
     constructor(data = {}) {

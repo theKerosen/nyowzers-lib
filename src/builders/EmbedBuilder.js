@@ -1,7 +1,6 @@
 /**
  * Utility for creating message embeds.
  * Follows the Discord API structure closely.
- * See: https:
  */
 class EmbedBuilder {
     constructor(data = {}) {

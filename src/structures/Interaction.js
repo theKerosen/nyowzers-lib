@@ -105,10 +105,8 @@ class Interaction extends Base {
         }
 
         await this.client.rest.createInteractionResponse(this.id, this.token, {
-            // --- Access via Constants object ---
             type: Constants.InteractionResponseTypes
                 .CHANNEL_MESSAGE_WITH_SOURCE,
-            // --- End Access ---
             data: payload,
         });
         this.replied = true;
@@ -119,10 +117,8 @@ class Interaction extends Base {
             throw new Error("Interaction already acknowledged.");
 
         await this.client.rest.createInteractionResponse(this.id, this.token, {
-            // --- Access via Constants object ---
             type: Constants.InteractionResponseTypes
                 .DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-            // --- End Access ---
             data: ephemeral ? { flags: 1 << 6 } : {},
         });
         this.deferred = true;
@@ -220,9 +216,7 @@ class Interaction extends Base {
         );
 
         await this.client.rest.createInteractionResponse(this.id, this.token, {
-            // --- Access via Constants object ---
             type: Constants.InteractionResponseTypes.DEFERRED_UPDATE_MESSAGE,
-            // --- End Access ---
         });
         this.deferred = true;
     }
@@ -256,9 +250,7 @@ class Interaction extends Base {
         );
 
         await this.client.rest.createInteractionResponse(this.id, this.token, {
-            // --- Access via Constants object ---
             type: Constants.InteractionResponseTypes.UPDATE_MESSAGE,
-            // --- End Access ---
             data: payload,
         });
         this.replied = true;

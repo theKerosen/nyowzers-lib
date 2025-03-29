@@ -1,6 +1,6 @@
 const fetch = require("node-fetch");
 const AbortController = require("abort-controller");
-const { Host, APIVersion } = require("../util/Constants");
+const { Host } = require("../util/Constants");
 const Router = require("./Router");
 const pkg = require("../../package.json");
 
