@@ -57,10 +57,6 @@ class TextChannel extends Channel {
             throw new TypeError("Invalid message options provided.");
         }
 
-        console.log(
-            `[TextChannel.send] Payload for channel ${this.id}:`,
-            util.inspect(apiPayload, { depth: 3 }),
-        );
         if (
             !apiPayload.content &&
             !apiPayload.embeds?.length &&
@@ -83,10 +79,6 @@ class TextChannel extends Channel {
         }
 
         const addedMessage = this.messages._add(messageData);
-
-        console.log(
-            `[TextChannel.send] Returning from _add: ID=${addedMessage?.id}, IsMessage=${addedMessage?.constructor?.name === "Message"}`,
-        );
 
         return addedMessage;
     }

@@ -139,10 +139,6 @@ class Message extends Base {
 
         const sentMessage = await this.channel.send(payload);
 
-        console.log(
-            `[Message.reply] Returning from channel.send: ID=${sentMessage?.id}, IsMessage=${sentMessage instanceof Message}`,
-        );
-
         return sentMessage;
     }
 

@@ -210,11 +210,6 @@ class Interaction extends Base {
         if (this.deferred || this.replied)
             throw new Error("Interaction already acknowledged.");
 
-        console.log(
-            "[DEBUG deferUpdate] Checking Constants.InteractionResponseTypes:",
-            util.inspect(Constants.InteractionResponseTypes),
-        );
-
         await this.client.rest.createInteractionResponse(this.id, this.token, {
             type: Constants.InteractionResponseTypes.DEFERRED_UPDATE_MESSAGE,
         });
@@ -243,11 +238,6 @@ class Interaction extends Base {
         } else {
             throw new TypeError("Invalid update options provided.");
         }
-
-        console.log(
-            "[DEBUG update] Checking Constants.InteractionResponseTypes:",
-            util.inspect(Constants.InteractionResponseTypes),
-        );
 
         await this.client.rest.createInteractionResponse(this.id, this.token, {
             type: Constants.InteractionResponseTypes.UPDATE_MESSAGE,
