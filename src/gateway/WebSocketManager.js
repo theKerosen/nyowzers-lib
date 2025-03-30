@@ -10,6 +10,9 @@ const {
 const GatewayEventHandler = require("./GatewayEventHandler");
 const zlib = require("zlib-sync");
 
+const ZLIB_SUFFIX = Buffer.from([0x00, 0x00, 0xff, 0xff]);
+const FLUSH_MODE = zlib.Z_SYNC_FLUSH;
+
 class WebSocketManager extends EventEmitter {
     constructor(client) {
         super();
@@ -26,11 +29,18 @@ class WebSocketManager extends EventEmitter {
         this.latency = Infinity;
         this.status = "idle";
         this.eventHandler = new GatewayEventHandler(this.client, this);
-        this.inflate = new zlib.Inflate({
-            chunkSize: 65535,
-            flush: zlib.Z_SYNC_FLUSH,
-            to: "string",
-        });
+        try {
+            this.inflate = new zlib.Inflate({
+                chunkSize: 65535,
+            });
+            console.log("[WS] zlib-sync Inflate context initialized.");
+        } catch (e) {
+            console.error(
+                "[WS FATAL] Failed to initialize zlib-sync Inflate:",
+                e,
+            );
+            this.inflate = null;
+        }
     }
 
     async connect() {
@@ -86,35 +96,108 @@ class WebSocketManager extends EventEmitter {
     }
 
     _onMessage(data) {
-        let packet;
+        let packet = null;
+        let rawDataStr = null;
+
         try {
             if (data instanceof Buffer) {
-                const l = data.length;
-                const flush =
-                    l >= 4 &&
-                    data[l - 4] === 0x00 &&
-                    data[l - 3] === 0x00 &&
-                    data[l - 2] === 0xff &&
-                    data[l - 1] === 0xff;
+                if (!this.inflate) {
+                    this.client.emit(
+                        "warn",
+                        "[WS] Received buffer but inflate context is not available.",
+                    );
+                    return;
+                }
 
-                this.inflate.push(data, flush ? zlib.Z_SYNC_FLUSH : false);
-                if (!flush) return;
-                packet = JSON.parse(this.inflate.result);
+                this.inflate.push(data, FLUSH_MODE);
+
+                if (this.inflate.err) {
+                    this.client.emit(
+                        "warn",
+                        `[WS] Decompression error: ${this.inflate.err} (${this.inflate.msg})`,
+                    );
+                    console.error(
+                        "[WS Decompression] Raw data (Buffer):",
+                        data,
+                    );
+                    this.inflate.err = 0;
+                    return;
+                }
+
+                const decompressed = this.inflate.result;
+
+                if (
+                    !decompressed ||
+                    !(decompressed instanceof Buffer) ||
+                    decompressed.length === 0
+                ) {
+                    this.client.emit(
+                        "warn",
+                        `[WS] Decompression result is invalid or empty.`,
+                    );
+                    console.error(
+                        "[WS Decompression] Inflate result:",
+                        decompressed,
+                    );
+                    console.error(
+                        "[WS Decompression] Raw data (Buffer):",
+                        data,
+                    );
+                    return;
+                }
+                rawDataStr = decompressed.toString("utf-8");
+            } else if (typeof data === "string") {
+                rawDataStr = data;
             } else {
-                packet = JSON.parse(data);
+                this.client.emit(
+                    "warn",
+                    `[WS] Received unexpected data type: ${typeof data}`,
+                );
+                console.error("[WS Data Type] Data:", data);
+                return;
             }
-            this.client.emit(Events.WS_PACKET, packet);
-            this._handlePacket(packet);
-        } catch (error) {
+
+            if (!rawDataStr) {
+                this.client.emit(
+                    "warn",
+                    "[WS] Received empty data string after processing.",
+                );
+                return;
+            }
+
+            packet = JSON.parse(rawDataStr);
+        } catch (err) {
             this.client.emit(
                 "warn",
-                `[WS] Failed to process message: ${error.message}`,
+                `[WS] Failed to process/parse message: ${err.message}`,
             );
-            this.client.emit("debug", `[WS] Raw invalid data: ${data}`);
+
+            console.error(
+                "[WS Parse Error] Raw data string causing error (first 200 chars):",
+                rawDataStr?.slice(0, 200),
+            );
+            packet = null;
         }
+
+        if (packet === null) {
+            return;
+        }
+
+        this._handlePacket(packet);
     }
 
     _handlePacket(packet) {
+        if (!packet) {
+            this.client.emit(
+                "error",
+                new Error(
+                    "[WS FATAL _handlePacket] Received null packet unexpectedly!",
+                ),
+            );
+            console.error("[WS FATAL _handlePacket] Stack:", new Error().stack);
+            return;
+        }
+
         if (packet.s) {
             this.sequence = packet.s;
         }

@@ -11,6 +11,7 @@
     "dependencies": {
         "abort-controller": "^3.0.0",
         "dotenv": "^16.4.7",
+        "form-data": "^4.0.2",
         "node-fetch": "^2.7.0",
         "src": "file:src",
         "ws": "^8.18.1",

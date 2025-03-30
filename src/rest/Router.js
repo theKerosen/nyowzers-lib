@@ -25,11 +25,16 @@ const Routes = {
         `/channels/${channelId}/messages/${messageId}/reactions`,
     channelMessageReaction: (channelId, messageId, emoji) =>
         `/channels/${channelId}/messages/${messageId}/reactions/${emoji}`,
-    channelMessageReactionUser: (channelId, messageId, emoji, userId) =>
-        `/channels/${channelId}/messages/${messageId}/reactions/${emoji}/${userId}`,
+    channelMessageReactionUser: (channelId, messageId, emoji, userId = "@me") =>
+        `/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/${userId}`,
+    channelMessagesBulkDelete: (channelId) =>
+        `/channels/${channelId}/messages/bulk-delete`,
 
     interactionCallback: (interactionId, interactionToken) =>
         `/interactions/${interactionId}/${interactionToken}/callback`,
+
+    webhookMessages: (applicationId, interactionToken) =>
+        `/webhooks/${applicationId}/${interactionToken}/messages`, // POST here for followups
     webhookMessage: (
         applicationId,
         interactionToken,

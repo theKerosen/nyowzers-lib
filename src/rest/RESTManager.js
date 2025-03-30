@@ -3,6 +3,7 @@ const AbortController = require("abort-controller");
 const { Host } = require("../util/Constants");
 const Router = require("./Router");
 const pkg = require("../package.json");
+const FormData = require("form-data");
 
 class RESTManager {
     constructor(client) {
@@ -14,13 +15,14 @@ class RESTManager {
         this.processingQueue = false;
     }
 
-    async queueRequest(method, route, endpoint, data = null) {
+    async queueRequest(method, route, endpoint, data = null, files = null) {
         return new Promise((resolve, reject) => {
             this.requestQueue.push({
                 method,
                 route,
                 endpoint,
                 data,
+                files,
                 resolve,
                 reject,
             });
@@ -35,7 +37,7 @@ class RESTManager {
 
         this.processingQueue = true;
 
-        const { method, route, endpoint, data, resolve, reject } =
+        const { method, route, endpoint, data, files, resolve, reject } =
             this.requestQueue.shift();
 
         try {
@@ -82,6 +84,7 @@ class RESTManager {
                 route,
                 endpoint,
                 data,
+                files,
             );
             resolve(result);
         } catch (error) {
@@ -92,21 +95,57 @@ class RESTManager {
         }
     }
 
-    async _makeRequest(method, route, endpoint, body) {
+    async _makeRequest(method, route, endpoint, body, files = null) {
+        // <-- Add 'files' parameter
         const url = `${Host}${endpoint}`;
         const headers = {
+            // Keep base headers
             Authorization: `Bot ${this.client.token}`,
             "User-Agent": this.userAgent,
-            "Accept-Encoding": "gzip,deflate",
+            // Content-Type and body are now dynamic based on whether files are present
         };
-        let stringifiedBody = null;
-        if (body) {
-            headers["Content-Type"] = "application/json";
+        let fetchBody = null; // Body for the fetch call
 
-            stringifiedBody = JSON.stringify(body, (key, value) =>
+        // --- Handle File Uploads ---
+        if (files && files.length > 0) {
+            const form = new FormData();
+
+            // If there's a JSON payload (like message content/embeds alongside files),
+            // Discord expects it as a specific field named 'payload_json'.
+            if (body) {
+                form.append(
+                    "payload_json",
+                    JSON.stringify(body, (key, value) =>
+                        typeof value === "bigint" ? value.toString() : value,
+                    ),
+                );
+            }
+
+            // Append files
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (!file || !file.attachment) continue; // Check attachment exists
+
+                // --- Ensure Buffer is passed correctly ---
+                // The 'form-data' library *should* handle Buffers directly.
+                // Parameter 1: field name ('files[i]')
+                // Parameter 2: data (the Buffer: file.attachment)
+                // Parameter 3: options object OR just the filename string
+                form.append(`files[${i}]`, file.attachment, file.name);
+                // --- End Ensure ---
+            }
+
+            fetchBody = form;
+            Object.assign(headers, form.getHeaders()); // Get boundary headers
+        } else if (body) {
+            // Standard JSON body
+            fetchBody = JSON.stringify(body, (key, value) =>
                 typeof value === "bigint" ? value.toString() : value,
             );
+            headers["Content-Type"] = "application/json";
         }
+        // --- End File Handling ---
 
         const controller = new AbortController();
         const timeout = setTimeout(
@@ -118,11 +157,10 @@ class RESTManager {
         try {
             response = await fetch(url, {
                 method: method,
-                headers: headers,
-
-                body: stringifiedBody,
+                headers: headers, // Pass modified headers
+                body: fetchBody, // Pass FormData or stringified JSON
                 signal: controller.signal,
-                compress: true,
+                compress: true, // Still okay to request compression
             });
         } catch (error) {
             clearTimeout(timeout);
@@ -193,15 +231,29 @@ class RESTManager {
         }
 
         let responseBody;
-        if (
-            response.headers.get("content-type")?.includes("application/json")
-        ) {
-            responseBody = await response.json();
-        } else {
-            responseBody = await response.buffer();
+        try {
+            // Added try-catch around body processing
+            if (
+                response.headers
+                    .get("content-type")
+                    ?.includes("application/json")
+            ) {
+                responseBody = await response.json();
+            } else {
+                // If not JSON (e.g., empty 204), get text/buffer might be safer
+                responseBody = await response.text(); // Get text and check if empty
+                if (!responseBody) responseBody = null; // Handle empty body for 204 etc.
+            }
+        } catch (parseError) {
+            console.error(
+                `[REST Error] Failed to parse response body for ${method} ${endpoint}:`,
+                parseError,
+            );
+            responseBody = await response.text(); // Fallback to raw text on JSON parse error
         }
 
         if (!response.ok) {
+            // Attach body to error object for debugging
             const error = new Error(
                 `Discord API Error: ${response.status} ${response.statusText} on ${method} ${endpoint}`,
             );
@@ -213,9 +265,7 @@ class RESTManager {
             throw error;
         }
 
-        if (response.status === 204) {
-            return null;
-        }
+        if (response.status === 204) return null;
 
         return responseBody;
     }
@@ -224,11 +274,8 @@ class RESTManager {
         return this.queueRequest("GET", Router.gateway(), Router.gateway());
     }
     getGatewayBot() {
-        return this.queueRequest(
-            "GET",
-            Router.gatewayBot(),
-            Router.gatewayBot(),
-        );
+        const route = Router.gatewayBot();
+        return this.queueRequest("GET", route, route, null, null);
     }
 
     getUser(userId) {
@@ -289,22 +336,22 @@ class RESTManager {
             Router.channel(channelId),
         );
     }
-    createMessage(channelId, data) {
-        return this.queueRequest(
-            "POST",
-            Router.channelMessages(":id"),
-            Router.channelMessages(channelId),
-            data,
-        );
+    createMessage(channelId, data, files = null) {
+        // <-- Add files param
+        const route = Router.channelMessages(":id");
+        const endpoint = Router.channelMessages(channelId);
+        // Pass data as body, files as files
+        return this.queueRequest("POST", route, endpoint, data, files);
     }
-    editMessage(channelId, messageId, data) {
-        return this.queueRequest(
-            "PATCH",
-            Router.channelMessage(":id", ":id"),
-            Router.channelMessage(channelId, messageId),
-            data,
-        );
+
+    editMessage(channelId, messageId, data, files = null) {
+        // <-- Add files param
+        const route = Router.channelMessage(":id", ":id");
+        const endpoint = Router.channelMessage(channelId, messageId);
+        // Pass data as body, files as files
+        return this.queueRequest("PATCH", route, endpoint, data, files);
     }
+
     deleteMessage(channelId, messageId) {
         return this.queueRequest(
             "DELETE",
@@ -347,6 +394,14 @@ class RESTManager {
             Router.webhookMessage(applicationId, interactionToken),
             data,
         );
+    }
+    createFollowupMessage(applicationId, interactionToken, data, files = null) {
+        const route = Router.webhooks(":id", ":token"); // Route for rate limit
+        const endpoint = Router.webhookMessages(
+            applicationId,
+            interactionToken,
+        ); // POST endpoint
+        return this.queueRequest("POST", route, endpoint, data, files);
     }
     deleteOriginalInteractionResponse(applicationId, interactionToken) {
         return this.queueRequest(

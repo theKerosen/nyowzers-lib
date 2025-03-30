@@ -2,7 +2,6 @@ const Channel = require("./Channel");
 const MessageManager = require("../managers/MessageManager");
 const MessageCollector = require("../collectors/MessageCollector");
 const InteractionCollector = require("../collectors/InteractionCollector");
-const util = require("util");
 
 class TextChannel extends Channel {
     constructor(client, data, guild = null) {
@@ -27,6 +26,7 @@ class TextChannel extends Channel {
 
     async send(options) {
         let apiPayload = {};
+        let files = null;
 
         if (typeof options === "string") {
             apiPayload.content = options;
@@ -44,6 +44,7 @@ class TextChannel extends Channel {
                 files: options.files,
                 flags: options.flags,
             };
+            files = options.files ?? null;
             Object.keys(apiPayload).forEach(
                 (key) =>
                     apiPayload[key] === undefined && delete apiPayload[key],
@@ -72,10 +73,11 @@ class TextChannel extends Channel {
         const messageData = await this.client.rest.createMessage(
             this.id,
             apiPayload,
+            files,
         );
 
         if (!this.messages) {
-            /* ... */ return null;
+            return null;
         }
 
         const addedMessage = this.messages._add(messageData);
